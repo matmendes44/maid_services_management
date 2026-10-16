@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "users": "tsx --env-file=.env.local scripts/users.ts"
+    "users": "tsx --env-file=.env.local scripts/users.ts",
+    "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
+    "vercel-build": "npm run db:migrate && next build"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
