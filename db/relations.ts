@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { customers, contacts, properties, servicePlans, payments, appointments, gpsStops } from "../db/schema";
+import { customers, contacts, properties, servicePlans, payments, appointments, gpsStops, users, sessions } from "../db/schema";
 
 export const customersRelations = relations(customers, ({one, many}) => ({
 	customer: one(customers, {
@@ -72,5 +72,15 @@ export const gpsStopsRelations = relations(gpsStops, ({one}) => ({
 	appointment: one(appointments, {
 		fields: [gpsStops.appointmentId],
 		references: [appointments.id]
+	}),
+}));
+export const usersRelations = relations(users, ({many}) => ({
+	sessions: many(sessions),
+}));
+
+export const sessionsRelations = relations(sessions, ({one}) => ({
+	user: one(users, {
+		fields: [sessions.userId],
+		references: [users.id]
 	}),
 }));

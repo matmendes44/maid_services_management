@@ -1,11 +1,13 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { requireUser } from "@/lib/auth/session";
 import { appointments, customers, payments, properties } from "@/db/schema";
 import { displayName } from "./options";
 
 // Options for the "Referred by" select. A customer can't refer themselves,
 // so the one being edited is left out.
 export async function getReferrerOptions(excludeId?: number) {
+  await requireUser();
   const rows = await db
     .select({
       id: customers.id,
@@ -23,6 +25,7 @@ export async function getReferrerOptions(excludeId?: number) {
 }
 
 export async function getNextCustomerCode() {
+  await requireUser();
   const [{ maxCode }] = await db
     .select({
       maxCode: sql<number | null>`max(substring(${customers.customerCode} from '^C(\\d+)$')::int)`,
@@ -38,10 +41,12 @@ export function parseCustomerId(raw: string) {
 }
 
 export async function getCustomer(id: number) {
+  await requireUser();
   return db.query.customers.findFirst({ where: eq(customers.id, id) });
 }
 
 export async function getCustomerDetail(id: number) {
+  await requireUser();
   const [customer, recentVisits, [totals]] = await Promise.all([
     db.query.customers.findFirst({
       where: eq(customers.id, id),

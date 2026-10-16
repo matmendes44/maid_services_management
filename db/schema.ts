@@ -278,3 +278,44 @@ export const houseProfitability = pgView("house_profitability", {	customerCode: 
 	revenuePerHr: numeric("revenue_per_hr"),
 	monthlyRevenue: numeric("monthly_revenue"),
 }).as(sql`SELECT s.customer_code, s.client, concat_ws(', '::text, p.street, p.city) AS address, p.zone, sp.frequency, round(sp.rate_cents::numeric / 100.0, 2) AS rate, s.visits, s.median_min, round(sp.rate_cents::numeric / 100.0 / NULLIF(s.median_min, 0)::numeric * 60::numeric, 2) AS revenue_per_hr, round(sp.rate_cents::numeric / 100.0 * CASE sp.frequency WHEN 'weekly'::frequency THEN 52::numeric / 12.0 WHEN 'biweekly'::frequency THEN 26::numeric / 12.0 WHEN 'every_4_weeks'::frequency THEN 13::numeric / 12.0 WHEN 'monthly'::frequency THEN 1::numeric WHEN 'every_2_months'::frequency THEN 0.5 ELSE 0::numeric END, 2) AS monthly_revenue FROM client_time_stats s JOIN properties p ON p.id = s.property_id JOIN service_plans sp ON sp.property_id = s.property_id AND sp.end_date IS NULL ORDER BY (round(sp.rate_cents::numeric / 100.0 / NULLIF(s.median_min, 0)::numeric * 60::numeric, 2)) DESC`);
+// Staff who can sign in. There's no public sign-up: accounts are created with
+// `npm run users -- add`. Emails are stored lowercased so lookups are exact.
+export const users = pgTable("users", {
+	id: bigserial({ mode: "number" }).primaryKey().notNull(),
+	email: text().notNull(),
+	name: text().notNull(),
+	passwordHash: text("password_hash").notNull(),
+	isDisabled: boolean("is_disabled").default(false).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	unique("users_email_key").on(table.email),
+	check("users_email_lower_check", sql`email = lower(email)`),
+]);
+
+// The session cookie holds a random token; only its SHA-256 hash is stored
+// here, so a leaked database can't be used to sign in.
+export const sessions = pgTable("sessions", {
+	id: text().primaryKey().notNull(),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	userId: bigint("user_id", { mode: "number" }).notNull(),
+	expiresAt: timestamp("expires_at", { withTimezone: true, mode: 'string' }).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("sessions_user_id").using("btree", table.userId.asc().nullsLast().op("int8_ops")),
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [users.id],
+			name: "sessions_user_id_fkey"
+		}).onDelete("cascade"),
+]);
+
+// Failed sign-ins, used to rate-limit password guessing by email and by IP.
+export const loginAttempts = pgTable("login_attempts", {
+	id: bigserial({ mode: "number" }).primaryKey().notNull(),
+	email: text().notNull(),
+	ip: text(),
+	attemptedAt: timestamp("attempted_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("login_attempts_email_at").using("btree", table.email.asc().nullsLast().op("text_ops"), table.attemptedAt.asc().nullsLast().op("timestamptz_ops")),
+	index("login_attempts_ip_at").using("btree", table.ip.asc().nullsLast().op("text_ops"), table.attemptedAt.asc().nullsLast().op("timestamptz_ops")),
+]);

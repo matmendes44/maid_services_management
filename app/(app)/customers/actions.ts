@@ -3,6 +3,7 @@
 import { eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
+import { requireUser } from "@/lib/auth/session";
 import { customers } from "@/db/schema";
 import {
   customerStatuses,
@@ -133,6 +134,7 @@ export async function createCustomer(
   _prev: CustomerFormState,
   formData: FormData,
 ): Promise<CustomerFormState> {
+  await requireUser();
   const { data, errors, hasErrors } = parse(formData);
   if (hasErrors) return { errors };
 
@@ -151,6 +153,7 @@ export async function updateCustomer(
   _prev: CustomerFormState,
   formData: FormData,
 ): Promise<CustomerFormState> {
+  await requireUser();
   const current = await db.query.customers.findFirst({
     columns: { status: true },
     where: eq(customers.id, id),

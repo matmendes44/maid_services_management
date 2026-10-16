@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ilike, or, sql, type SQL } from "drizzle-orm";
 import { ArrowDown, ArrowUp, ArrowUpDown, Plus } from "lucide-react";
 import { db } from "@/db";
+import { requireUser } from "@/lib/auth/session";
 import { contacts, customers, properties } from "@/db/schema";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -88,6 +89,7 @@ function searchCondition(q: string) {
 }
 
 async function getCustomers(sort: SortKey, dir: SortDir, q: string) {
+  await requireUser();
   const direction = dir === "asc" ? sql`asc` : sql`desc`;
   const orderBy = sortOptions[sort].by.map(
     (expr) => sql`${expr} ${direction} nulls last`,

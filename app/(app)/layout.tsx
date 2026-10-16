@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { UserMenu } from "./user-menu";
 
 const links = [
   { href: "/", label: "Dashboard" },
@@ -21,6 +23,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {link.label}
             </Link>
           ))}
+          <Suspense>
+            <UserMenu />
+          </Suspense>
         </nav>
       </header>
       <main className="mx-auto max-w-6xl p-8">{children}</main>
