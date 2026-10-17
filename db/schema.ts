@@ -1,4 +1,4 @@
-import { pgTable, foreignKey, unique, check, bigserial, text, bigint, timestamp, index, uniqueIndex, boolean, char, numeric, integer, smallint, date, pgView, pgEnum } from "drizzle-orm/pg-core"
+import { pgTable, foreignKey, unique, check, bigserial, text, bigint, timestamp, index, uniqueIndex, boolean, char, numeric, integer, smallint, date, pgView, pgEnum, type PgTableExtraConfigValue } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 export const customerStatus = pgEnum("customer_status", ['lead', 'active', 'paused', 'inactive'])
@@ -27,12 +27,25 @@ export const customers = pgTable("customers", {
 	startDate: date("start_date").default(sql`CURRENT_DATE`).notNull(),
 	endDate: date("end_date"),
 	endReasons: endReason("end_reasons").array().default(sql`'{}'`).notNull(),
-}, (table) => [
+	// One of the customer's own properties (enforced by the composite foreign
+	// key below). Cleared automatically if that property is deleted.
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	billingPropertyId: bigint("billing_property_id", { mode: "number" }),
+// annotated because customers and properties reference each other, which
+// TypeScript can't infer on its own
+}, (table): PgTableExtraConfigValue[] => [
 	foreignKey({
 			columns: [table.referredById],
 			foreignColumns: [table.id],
 			name: "customers_referred_by_id_fkey"
 		}),
+	// The migration uses ON DELETE SET NULL ("billing_property_id"): drizzle can
+	// only null every column of the key, which would include customers.id.
+	foreignKey({
+			columns: [table.billingPropertyId, table.id],
+			foreignColumns: [properties.id, properties.customerId],
+			name: "customers_billing_property_fkey"
+		}).onDelete("set null"),
 	unique("customers_customer_code_key").on(table.customerCode),
 	unique("customers_stripe_customer_id_key").on(table.stripeCustomerId),
 	check("customers_check", sql`(first_name IS NOT NULL) OR (company_name IS NOT NULL)`),
@@ -53,6 +66,7 @@ export const contacts = pgTable("contacts", {
 	smsOptIn: boolean("sms_opt_in").default(true).notNull(),
 }, (table) => [
 	index("contacts_phone").using("btree", table.phone.asc().nullsLast().op("text_ops")),
+	index("contacts_customer_id").using("btree", table.customerId.asc().nullsLast().op("int8_ops")),
 	uniqueIndex("one_primary_contact").using("btree", table.customerId.asc().nullsLast().op("int8_ops")).where(sql`is_primary`),
 	foreignKey({
 			columns: [table.customerId],
@@ -76,13 +90,16 @@ export const properties = pgTable("properties", {
 	accessNotes: text("access_notes"),
 	serviceNotes: text("service_notes"),
 	isActive: boolean("is_active").default(true).notNull(),
-}, (table) => [
+}, (table): PgTableExtraConfigValue[] => [
 	foreignKey({
 			columns: [table.customerId],
 			foreignColumns: [customers.id],
 			name: "properties_customer_id_fkey"
 		}).onDelete("cascade"),
 	check("properties_zip_check", sql`zip ~ '^\\d{5}$'::text`),
+	index("properties_customer_id").using("btree", table.customerId.asc().nullsLast().op("int8_ops")),
+	// target of customers_billing_property_fkey
+	unique("properties_id_customer_id_key").on(table.id, table.customerId),
 ]);
 
 export const servicePlans = pgTable("service_plans", {
@@ -319,3 +336,4 @@ export const loginAttempts = pgTable("login_attempts", {
 	index("login_attempts_email_at").using("btree", table.email.asc().nullsLast().op("text_ops"), table.attemptedAt.asc().nullsLast().op("timestamptz_ops")),
 	index("login_attempts_ip_at").using("btree", table.ip.asc().nullsLast().op("text_ops"), table.attemptedAt.asc().nullsLast().op("timestamptz_ops")),
 ]);
+

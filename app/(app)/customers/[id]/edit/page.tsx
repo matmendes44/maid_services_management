@@ -4,13 +4,20 @@ import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 import { updateCustomer } from "../../actions";
 import { CustomerForm } from "../../customer-form";
-import { getCustomer, getReferrerOptions, parseCustomerId } from "../../data";
+import {
+  getCustomer,
+  getCustomerPropertyOptions,
+  getReferrerOptions,
+  parseCustomerId,
+} from "../../data";
 import { customerToFormValues, displayName } from "../../options";
 
 async function EditCustomerForm({ params }: Pick<PageProps<"/customers/[id]/edit">, "params">) {
   const id = parseCustomerId((await params).id);
-  const [customer, referrers] =
-    id === null ? [undefined, []] : await Promise.all([getCustomer(id), getReferrerOptions(id)]);
+  const [customer, referrers, properties] =
+    id === null
+      ? [undefined, [], []]
+      : await Promise.all([getCustomer(id), getReferrerOptions(id), getCustomerPropertyOptions(id)]);
   if (!customer) notFound();
 
   return (
@@ -22,7 +29,7 @@ async function EditCustomerForm({ params }: Pick<PageProps<"/customers/[id]/edit
         <ArrowLeft className="size-4" aria-hidden="true" />
         {displayName(customer)}
       </Link>
-      <h1 className="text-2xl font-bold">Edit customer</h1>
+      <h1 className="text-3xl font-bold">Edit customer</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         You&apos;ll be asked to confirm your changes before they&apos;re saved.
       </p>
@@ -31,6 +38,7 @@ async function EditCustomerForm({ params }: Pick<PageProps<"/customers/[id]/edit
         action={updateCustomer.bind(null, customer.id)}
         initialValues={customerToFormValues(customer)}
         referrers={referrers}
+        properties={properties}
         cancelHref={`/customers/${customer.id}`}
       />
     </>

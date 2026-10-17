@@ -54,11 +54,15 @@ export const fieldLabels = {
   companyName: "Company name",
   email: "Email",
   referredById: "Referred by",
+  billingPropertyId: "Billing address",
   stripeCustomerId: "Stripe customer ID",
   notes: "Notes",
 } as const;
 
 export type CustomerField = keyof typeof fieldLabels;
+
+// Field names of the first property on the new-customer form.
+export const FIRST_PROPERTY_PREFIX = "property_";
 export type CustomerFormValues = Record<CustomerField, string>;
 
 // Turns submitted form data into trimmed strings. The server validates these,
@@ -83,6 +87,7 @@ export function normalizeCustomerForm(formData: FormData): CustomerFormValues {
     companyName: get("companyName"),
     email: get("email").toLowerCase(),
     referredById: get("referredById"),
+    billingPropertyId: get("billingPropertyId"),
     stripeCustomerId: get("stripeCustomerId"),
     notes: get("notes"),
   };
@@ -102,6 +107,7 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
     companyName: c.companyName ?? "",
     email: c.email ?? "",
     referredById: c.referredById?.toString() ?? "",
+    billingPropertyId: c.billingPropertyId?.toString() ?? "",
     stripeCustomerId: c.stripeCustomerId ?? "",
     notes: c.notes ?? "",
   };
@@ -114,4 +120,19 @@ export function displayName(c: {
 }) {
   const person = [c.firstName, c.lastName].filter(Boolean).join(" ");
   return person || c.companyName || "—";
+}
+
+// US phone numbers are stored as +1XXXXXXXXXX. Returns null if the input
+// isn't a 10-digit US number (an optional leading 1 is allowed).
+export function normalizePhone(input: string) {
+  const digits = input.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return null;
+}
+
+// "+14435405530" → "(443) 540-5530"; anything else is shown as stored.
+export function formatPhone(phone: string) {
+  const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(phone);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
 }

@@ -5,7 +5,13 @@ import { useEffect, useRef, useTransition } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-export function SearchBox() {
+export function SearchBox({
+  label = "Search customers",
+  placeholder = "Search name, code, email, phone, address…",
+}: {
+  label?: string;
+  placeholder?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -37,8 +43,8 @@ export function SearchBox() {
       />
       <Input
         type="search"
-        aria-label="Search customers"
-        placeholder="Search name, code, email, phone, address…"
+        aria-label={label}
+        placeholder={placeholder}
         defaultValue={searchParams.get("q") ?? ""}
         onChange={(e) => onChange(e.target.value)}
         className="pl-8"
@@ -48,10 +54,10 @@ export function SearchBox() {
   );
 }
 
-export function SearchBoxFallback() {
+export function SearchBoxFallback({ label = "Search customers" }: { label?: string }) {
   return (
     <div className="relative w-full sm:max-w-sm">
-      <Input disabled aria-label="Search customers" placeholder="Search…" className="pl-8" />
+      <Input disabled aria-label={label} placeholder="Search…" className="pl-8" />
     </div>
   );
 }

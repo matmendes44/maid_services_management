@@ -4,11 +4,20 @@ import { eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth/session";
-import { customers } from "@/db/schema";
+import { nextId, pgError } from "@/lib/db-helpers";
+import { customers, properties } from "@/db/schema";
+import {
+  addressToRow,
+  isAddressBlank,
+  readAddress,
+  validateAddress,
+  type AddressErrors,
+} from "../properties/options";
 import {
   customerStatuses,
   customerTypes,
   endReasons,
+  FIRST_PROPERTY_PREFIX,
   normalizeCustomerForm,
   type CustomerField,
   type CustomerStatus,
@@ -18,6 +27,8 @@ import {
 
 export type CustomerFormState = {
   errors?: Partial<Record<CustomerField, string>>;
+  // the first property, entered on the new-customer form
+  propertyErrors?: AddressErrors;
   message?: string;
 };
 
@@ -80,6 +91,10 @@ function parse(
   else if (referredById !== null && referredById === selfId)
     errors.referredById = "A customer can't refer themselves.";
 
+  const billingPropertyId = values.billingPropertyId ? Number(values.billingPropertyId) : null;
+  if (billingPropertyId !== null && !Number.isSafeInteger(billingPropertyId))
+    errors.billingPropertyId = "Choose one of this customer's properties.";
+
   if (values.stripeCustomerId && !values.stripeCustomerId.startsWith("cus_"))
     errors.stripeCustomerId = 'Stripe customer IDs start with "cus_".';
 
@@ -96,24 +111,12 @@ function parse(
     companyName: values.companyName || null,
     email: values.email || null,
     referredById,
+    billingPropertyId,
     stripeCustomerId: values.stripeCustomerId || null,
     notes: values.notes || null,
   };
 
   return { data, errors, hasErrors: Object.keys(errors).length > 0 };
-}
-
-// Postgres errors arrive wrapped (DrizzleQueryError → NeonDbError); walk the
-// cause chain to find the one carrying the SQLSTATE code.
-function pgError(err: unknown): { code?: string; constraint?: string } | null {
-  let current: unknown = err;
-  while (current && typeof current === "object") {
-    if ("code" in current && typeof current.code === "string") {
-      return current as { code: string; constraint?: string };
-    }
-    current = (current as { cause?: unknown }).cause;
-  }
-  return null;
 }
 
 function dbErrorState(err: unknown, customerCode: string): CustomerFormState {
@@ -122,6 +125,8 @@ function dbErrorState(err: unknown, customerCode: string): CustomerFormState {
     return { errors: { customerCode: `${customerCode} is already in use.` } };
   if (pg?.code === "23505" && pg.constraint === "customers_stripe_customer_id_key")
     return { errors: { stripeCustomerId: "Another customer already has this Stripe ID." } };
+  if (pg?.code === "23503" && pg.constraint === "customers_billing_property_fkey")
+    return { errors: { billingPropertyId: "That property isn't one of this customer's." } };
   if (pg?.code === "23503")
     return { errors: { referredById: "That referring customer no longer exists." } };
   if (pg?.code === "23514" && pg.constraint === "customers_end_after_start_check")
@@ -136,11 +141,28 @@ export async function createCustomer(
 ): Promise<CustomerFormState> {
   await requireUser();
   const { data, errors, hasErrors } = parse(formData);
-  if (hasErrors) return { errors };
+  // The first property is optional (leads may not have one yet), but if any
+  // of it is filled in, it has to be a complete address.
+  const address = readAddress(formData, FIRST_PROPERTY_PREFIX);
+  const withProperty = !isAddressBlank(address);
+  const propertyErrors = withProperty ? validateAddress(address) : {};
+  if (hasErrors || Object.keys(propertyErrors).length > 0) return { errors, propertyErrors };
 
   let id: number;
   try {
-    [{ id }] = await db.insert(customers).values(data).returning({ id: customers.id });
+    id = await nextId("customers");
+    // a new customer's billing address is their first property
+    const customer = { ...data, id, billingPropertyId: null };
+    if (withProperty) {
+      const propertyId = await nextId("properties");
+      await db.batch([
+        db.insert(customers).values(customer),
+        db.insert(properties).values({ id: propertyId, customerId: id, ...addressToRow(address) }),
+        db.update(customers).set({ billingPropertyId: propertyId }).where(eq(customers.id, id)),
+      ]);
+    } else {
+      await db.insert(customers).values(customer);
+    }
   } catch (err) {
     return dbErrorState(err, data.customerCode);
   }

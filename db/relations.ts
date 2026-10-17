@@ -11,7 +11,14 @@ export const customersRelations = relations(customers, ({one, many}) => ({
 		relationName: "customers_referredById_customers_id"
 	}),
 	contacts: many(contacts),
-	properties: many(properties),
+	properties: many(properties, {
+		relationName: "customer_properties"
+	}),
+	billingProperty: one(properties, {
+		fields: [customers.billingPropertyId],
+		references: [properties.id],
+		relationName: "customer_billing_property"
+	}),
 	payments: many(payments),
 }));
 
@@ -25,7 +32,11 @@ export const contactsRelations = relations(contacts, ({one}) => ({
 export const propertiesRelations = relations(properties, ({one, many}) => ({
 	customer: one(customers, {
 		fields: [properties.customerId],
-		references: [customers.id]
+		references: [customers.id],
+		relationName: "customer_properties"
+	}),
+	billedCustomers: many(customers, {
+		relationName: "customer_billing_property"
 	}),
 	servicePlans: many(servicePlans),
 	appointments: many(appointments),

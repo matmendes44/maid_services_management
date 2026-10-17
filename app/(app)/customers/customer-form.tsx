@@ -17,12 +17,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressFields } from "../properties/address-fields";
 import type { CustomerFormState } from "./actions";
 import {
   customerStatuses,
   customerTypes,
   endReasonLabels,
   endReasons,
+  FIRST_PROPERTY_PREFIX,
   fieldLabels,
   formatDay,
   normalizeCustomerForm,
@@ -60,11 +62,11 @@ function Field({
       </Label>
       {children}
       {error ? (
-        <p id={`${name}-error`} className="text-xs text-destructive">
+        <p id={`${name}-error`} className="text-[0.8rem] text-destructive">
           {error}
         </p>
       ) : hint ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p className="text-[0.8rem] text-muted-foreground">{hint}</p>
       ) : null}
     </div>
   );
@@ -75,12 +77,15 @@ export function CustomerForm({
   action,
   initialValues,
   referrers,
+  properties = [],
   cancelHref,
 }: {
   mode: "create" | "edit";
   action: (prev: CustomerFormState, formData: FormData) => Promise<CustomerFormState>;
   initialValues: CustomerFormValues;
   referrers: { id: number; label: string }[];
+  // the customer's properties, to choose a billing address from (edit only)
+  properties?: { id: number; label: string }[];
   cancelHref: string;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
@@ -94,11 +99,13 @@ export function CustomerForm({
   const reasonsRequired = mode === "create" || initialValues.status !== "inactive";
 
   const referrerLabels = new Map(referrers.map((r) => [String(r.id), r.label]));
+  const propertyLabels = new Map(properties.map((p) => [String(p.id), p.label]));
   const display = (field: CustomerField, value: string) => {
     if (!value) return "(empty)";
     if (field === "type") return typeLabels[value as CustomerType] ?? value;
     if (field === "status") return statusLabels[value as CustomerStatus] ?? value;
     if (field === "referredById") return referrerLabels.get(value) ?? `#${value}`;
+    if (field === "billingPropertyId") return propertyLabels.get(value) ?? `#${value}`;
     if (field === "startDate" || field === "endDate") return formatDay(value);
     if (field === "endReasons")
       return value
@@ -157,7 +164,7 @@ export function CustomerForm({
         )}
 
         <fieldset className="grid gap-4 sm:grid-cols-2">
-          <legend className="mb-3 text-sm font-semibold">Account</legend>
+          <legend className="mb-3 text-base font-semibold">Account</legend>
           <Field
             name="customerCode"
             required
@@ -219,9 +226,9 @@ export function CustomerForm({
                 </label>
               ))}
               {errors.endReasons ? (
-                <p id="endReasons-error" className="text-xs text-destructive">{errors.endReasons}</p>
+                <p id="endReasons-error" className="text-[0.8rem] text-destructive">{errors.endReasons}</p>
               ) : (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[0.8rem] text-muted-foreground">
                   {reasonsRequired
                     ? "Choose at least one."
                     : "Optional for customers who were already inactive."}
@@ -232,7 +239,7 @@ export function CustomerForm({
         )}
 
         <fieldset className="grid gap-4 sm:grid-cols-2">
-          <legend className="mb-3 text-sm font-semibold">Name</legend>
+          <legend className="mb-3 text-base font-semibold">Name</legend>
           <Field name="firstName" error={errors.firstName}>
             <Input {...field("firstName")} autoComplete="off" autoFocus={mode === "create"} />
           </Field>
@@ -249,8 +256,22 @@ export function CustomerForm({
           </Field>
         </fieldset>
 
+        {mode === "create" && (
+          <fieldset>
+            <legend className="mb-1 text-base font-semibold">Service address</legend>
+            <p className="mb-3 text-[0.8rem] text-muted-foreground">
+              Optional. The first property you enter becomes the customer&apos;s billing address.
+            </p>
+            <AddressFields
+              prefix={FIRST_PROPERTY_PREFIX}
+              errors={state.propertyErrors}
+              required={false}
+            />
+          </fieldset>
+        )}
+
         <fieldset className="grid gap-4 sm:grid-cols-2">
-          <legend className="mb-3 text-sm font-semibold">Details</legend>
+          <legend className="mb-3 text-base font-semibold">Details</legend>
           <Field name="email" error={errors.email} className="grid gap-1.5 sm:col-span-2">
             <Input {...field("email")} type="email" autoComplete="off" />
           </Field>
@@ -262,6 +283,29 @@ export function CustomerForm({
               ))}
             </NativeSelect>
           </Field>
+          {mode === "edit" && (
+            <Field
+              name="billingPropertyId"
+              hint={
+                properties.length === 0
+                  ? "Add a property to this customer to set a billing address."
+                  : "Choose which of the customer's properties to bill to."
+              }
+              error={errors.billingPropertyId}
+              className="grid gap-1.5 sm:col-span-2"
+            >
+              <NativeSelect
+                {...field("billingPropertyId")}
+                className="w-full"
+                disabled={properties.length === 0}
+              >
+                <NativeSelectOption value="">No billing address</NativeSelectOption>
+                {properties.map((p) => (
+                  <NativeSelectOption key={p.id} value={p.id}>{p.label}</NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+          )}
           <Field name="stripeCustomerId" hint="Optional, e.g. cus_ABC123" error={errors.stripeCustomerId}>
             <Input {...field("stripeCustomerId")} autoComplete="off" className="font-mono" />
           </Field>

@@ -2,6 +2,7 @@ import { asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth/session";
 import { appointments, customers, payments, properties } from "@/db/schema";
+import { formatAddress } from "../properties/options";
 import { displayName } from "./options";
 
 // Options for the "Referred by" select. A customer can't refer themselves,
@@ -22,6 +23,25 @@ export async function getReferrerOptions(excludeId?: number) {
   return rows
     .filter((c) => c.id !== excludeId)
     .map((c) => ({ id: c.id, label: `${displayName(c)} (${c.customerCode})` }));
+}
+
+// Every customer, for choosing who a property belongs to.
+export function getCustomerOptions() {
+  return getReferrerOptions();
+}
+
+// A customer's properties, for choosing their billing address.
+export async function getCustomerPropertyOptions(customerId: number) {
+  await requireUser();
+  const rows = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.customerId, customerId))
+    .orderBy(desc(properties.isActive), asc(properties.street));
+  return rows.map((p) => ({
+    id: p.id,
+    label: formatAddress(p) + (p.isActive ? "" : " (inactive)"),
+  }));
 }
 
 export async function getNextCustomerCode() {
@@ -85,4 +105,27 @@ export async function getCustomerDetail(id: number) {
 
   if (!customer) return null;
   return { ...customer, recentVisits, totals };
+}
+
+// Previous and next customer by code, in the same order as the list's code
+// sort (length first, so C999 comes before C1000).
+export async function getAdjacentCustomers(customerCode: string) {
+  await requireUser();
+  const key = sql`(length(${customers.customerCode}), ${customers.customerCode})`;
+  const current = sql`(length(${customerCode}), ${customerCode}::text)`;
+  const [[prev], [next]] = await Promise.all([
+    db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(sql`${key} < ${current}`)
+      .orderBy(sql`length(${customers.customerCode}) desc`, desc(customers.customerCode))
+      .limit(1),
+    db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(sql`${key} > ${current}`)
+      .orderBy(sql`length(${customers.customerCode})`, asc(customers.customerCode))
+      .limit(1),
+  ]);
+  return { prevId: prev?.id ?? null, nextId: next?.id ?? null };
 }

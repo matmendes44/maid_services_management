@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
+import { today } from "@/lib/today";
 import { createCustomer } from "../actions";
 import { CustomerForm } from "../customer-form";
 import { getNextCustomerCode, getReferrerOptions } from "../data";
-import { todayISO } from "../options";
 
 async function NewCustomerForm() {
-  const [suggestedCode, referrers] = await Promise.all([
+  const [suggestedCode, referrers, startDate] = await Promise.all([
     getNextCustomerCode(),
     getReferrerOptions(),
+    today(),
   ]);
   return (
     <CustomerForm
@@ -21,7 +22,7 @@ async function NewCustomerForm() {
         customerCode: suggestedCode,
         type: "residential",
         status: "lead",
-        startDate: todayISO(),
+        startDate,
         endDate: "",
         endReasons: "",
         firstName: "",
@@ -29,6 +30,7 @@ async function NewCustomerForm() {
         companyName: "",
         email: "",
         referredById: "",
+        billingPropertyId: "",
         stripeCustomerId: "",
         notes: "",
       }}
@@ -46,7 +48,7 @@ export default function NewCustomerPage() {
         <ArrowLeft className="size-4" aria-hidden="true" />
         Customers
       </Link>
-      <h1 className="text-2xl font-bold">Add customer</h1>
+      <h1 className="text-3xl font-bold">Add customer</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Fields marked * are required. A customer needs a first name or a company name.
       </p>
