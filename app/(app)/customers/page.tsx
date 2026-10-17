@@ -155,7 +155,7 @@ async function CustomerList({
         {sortOptions[sort].label.toLowerCase()} ({dir === "asc" ? "ascending" : "descending"})
       </p>
 
-      <div className="mt-4 rounded-lg border">
+      <div className="mt-4 overflow-hidden rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -179,16 +179,16 @@ async function CustomerList({
                   // The name link stretches over the whole row, so clicking
                   // anywhere on it opens the customer.
                   <TableRow key={c.id} className="relative cursor-pointer">
-                    <TableCell className="font-mono text-xs">{c.customerCode}</TableCell>
+                    <TableCell className="font-mono text-[0.8rem] text-muted-foreground">{c.customerCode}</TableCell>
                     <TableCell>
                       <Link
                         href={`/customers/${c.id}`}
-                        className="font-medium after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                        className="font-semibold text-foreground hover:text-link after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
                       >
                         {name}
                       </Link>
                       {showCompany && (
-                        <div className="text-xs text-muted-foreground">{c.companyName}</div>
+                        <div className="text-[0.8rem] text-muted-foreground">{c.companyName}</div>
                       )}
                     </TableCell>
                     <TableCell>{typeLabels[c.type]}</TableCell>
@@ -217,14 +217,14 @@ async function CustomerList({
 export default function CustomersPage(props: PageProps<"/customers">) {
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Customers</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold">Customers</h1>
         <Link href="/customers/new" className={buttonVariants()}>
           <Plus aria-hidden="true" />
           Add customer
         </Link>
       </div>
-      <div className="mb-3">
+      <div className="mb-4">
         <Suspense fallback={<SearchBoxFallback />}>
           <SearchBox />
         </Suspense>

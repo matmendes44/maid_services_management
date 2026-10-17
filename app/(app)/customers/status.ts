@@ -2,10 +2,10 @@ import type { CustomerStatus } from "./options";
 
 export const statusVariant: Record<
   CustomerStatus,
-  "default" | "secondary" | "outline" | "destructive"
+  "info" | "success" | "outline" | "muted"
 > = {
-  lead: "secondary",
-  active: "default",
+  lead: "info",
+  active: "success",
   paused: "outline",
-  inactive: "destructive",
+  inactive: "muted",
 };
