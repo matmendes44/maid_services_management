@@ -1,4 +1,4 @@
-import { pgTable, foreignKey, unique, check, bigserial, text, bigint, timestamp, index, uniqueIndex, boolean, char, numeric, integer, smallint, date, pgView, pgEnum, type PgTableExtraConfigValue } from "drizzle-orm/pg-core"
+import { pgTable, foreignKey, unique, check, bigserial, text, bigint, timestamp, index, uniqueIndex, boolean, char, numeric, integer, smallint, date, pgView, pgEnum, jsonb, type PgTableExtraConfigValue } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 export const customerStatus = pgEnum("customer_status", ['lead', 'active', 'paused', 'inactive'])
@@ -165,20 +165,63 @@ export const appointments = pgTable("appointments", {
 	id: bigserial({ mode: "number" }).primaryKey().notNull(),
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	propertyId: bigint("property_id", { mode: "number" }).notNull(),
+	// Who the visit is for, fixed when it's booked: it stays with this customer
+	// if the property is later transferred. Must own the property at booking
+	// (checked by the app, not a foreign key, so history survives transfers).
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	customerId: bigint("customer_id", { mode: "number" }).notNull(),
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	servicePlanId: bigint("service_plan_id", { mode: "number" }),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	vehicleId: bigint("vehicle_id", { mode: "number" }),
 	scheduledStart: timestamp("scheduled_start", { withTimezone: true, mode: 'string' }).notNull(),
-	scheduledEnd: timestamp("scheduled_end", { withTimezone: true, mode: 'string' }),
+	scheduledEnd: timestamp("scheduled_end", { withTimezone: true, mode: 'string' }).notNull(),
 	actualArrival: timestamp("actual_arrival", { withTimezone: true, mode: 'string' }),
 	actualDeparture: timestamp("actual_departure", { withTimezone: true, mode: 'string' }),
 	crew: text(),
 	priceCents: integer("price_cents").notNull(),
-	status: text().default('scheduled').notNull(),
+	status: text({ enum: ["pending", "completed", "canceled"] }).default('pending').notNull(),
 	gcalEventId: text("gcal_event_id"),
 	crewSize: smallint("crew_size"),
 	actualSource: text("actual_source"),
+	notes: text(),
+	// System information. created_by/updated_by/updated_at are filled in by the
+	// stamp_appointment trigger from the app.user_id setting (see
+	// lib/db-helpers.ts); rows imported before tracking have no created_at.
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	createdBy: bigint("created_by", { mode: "number" }),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	updatedBy: bigint("updated_by", { mode: "number" }),
 }, (table) => [
 	index("appointments_property_start").using("btree", table.propertyId.asc().nullsLast().op("int8_ops"), table.scheduledStart.asc().nullsLast().op("int8_ops")),
+	index("appointments_customer_start").using("btree", table.customerId.asc().nullsLast().op("int8_ops"), table.scheduledStart.asc().nullsLast().op("timestamptz_ops")),
+	index("appointments_start").using("btree", table.scheduledStart.asc().nullsLast().op("timestamptz_ops")),
+	foreignKey({
+			columns: [table.customerId],
+			foreignColumns: [customers.id],
+			name: "appointments_customer_id_fkey"
+		}),
+	foreignKey({
+			columns: [table.vehicleId],
+			foreignColumns: [vehicles.id],
+			name: "appointments_vehicle_id_fkey"
+		}),
+	foreignKey({
+			columns: [table.createdBy],
+			foreignColumns: [users.id],
+			name: "appointments_created_by_fkey"
+		}),
+	foreignKey({
+			columns: [table.updatedBy],
+			foreignColumns: [users.id],
+			name: "appointments_updated_by_fkey"
+		}),
+	check("appointments_end_after_start_check", sql`scheduled_end > scheduled_start`),
+	// Also, in the migration only (drizzle can't express it):
+	// appointments_vehicle_no_overlap EXCLUDE USING gist (vehicle_id WITH =,
+	// tstzrange(scheduled_start, scheduled_end) WITH &&) WHERE status <> 'canceled'.
 	foreignKey({
 			columns: [table.propertyId],
 			foreignColumns: [properties.id],
@@ -190,7 +233,7 @@ export const appointments = pgTable("appointments", {
 			name: "appointments_service_plan_id_fkey"
 		}),
 	unique("appointments_gcal_event_id_key").on(table.gcalEventId),
-	check("appointments_status_check", sql`status = ANY (ARRAY['scheduled'::text, 'completed'::text, 'cancelled'::text, 'no_show'::text])`),
+	check("appointments_status_check", sql`status = ANY (ARRAY['pending'::text, 'completed'::text, 'canceled'::text])`),
 	check("appointments_crew_size_check", sql`(crew_size >= 1) AND (crew_size <= 6)`),
 	check("appointments_actual_source_check", sql`actual_source = ANY (ARRAY['gps'::text, 'manual'::text, 'gcal_backfill'::text])`),
 	check("actual_times_in_order", sql`(actual_arrival IS NULL) OR (actual_departure IS NULL) OR (actual_departure > actual_arrival)`),
@@ -337,3 +380,40 @@ export const loginAttempts = pgTable("login_attempts", {
 	index("login_attempts_ip_at").using("btree", table.ip.asc().nullsLast().op("text_ops"), table.attemptedAt.asc().nullsLast().op("timestamptz_ops")),
 ]);
 
+
+// Company vehicles, assigned to appointments when they're booked. gps_name is
+// the name the GPS tracker uses (gps_trips.vehicle / gps_stops.vehicle).
+export const vehicles = pgTable("vehicles", {
+	id: bigserial({ mode: "number" }).primaryKey().notNull(),
+	name: text().notNull(),
+	plate: text(),
+	gpsName: text("gps_name"),
+	isActive: boolean("is_active").default(true).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	unique("vehicles_name_key").on(table.name),
+	unique("vehicles_gps_name_key").on(table.gpsName),
+]);
+
+// Change history, written by the audit_row trigger: one row per insert,
+// update or delete, with only the changed fields ({"field": {"from", "to"}})
+// for updates. changed_by is null for changes made outside the app.
+export const auditLog = pgTable("audit_log", {
+	id: bigserial({ mode: "number" }).primaryKey().notNull(),
+	tableName: text("table_name").notNull(),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	rowId: bigint("row_id", { mode: "number" }).notNull(),
+	action: text({ enum: ["insert", "update", "delete"] }).notNull(),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	changedBy: bigint("changed_by", { mode: "number" }),
+	changedAt: timestamp("changed_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	changes: jsonb().notNull(),
+}, (table) => [
+	index("audit_log_row").using("btree", table.tableName.asc().nullsLast().op("text_ops"), table.rowId.asc().nullsLast().op("int8_ops"), table.changedAt.asc().nullsLast().op("timestamptz_ops")),
+	foreignKey({
+			columns: [table.changedBy],
+			foreignColumns: [users.id],
+			name: "audit_log_changed_by_fkey"
+		}),
+	check("audit_log_action_check", sql`action = ANY (ARRAY['insert'::text, 'update'::text, 'delete'::text])`),
+]);

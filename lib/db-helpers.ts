@@ -25,3 +25,10 @@ export async function nextId(table: "customers" | "properties") {
   );
   return rows[0].id;
 }
+
+// First statement of a db.batch() that changes audited tables: tells the
+// database triggers who is making the change (app.user_id, transaction-local),
+// so created_by / updated_by and the audit_log record the right user.
+export function asUser(userId: number) {
+  return db.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);
+}

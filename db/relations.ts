@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { customers, contacts, properties, servicePlans, payments, appointments, gpsStops, users, sessions } from "../db/schema";
+import { customers, contacts, properties, servicePlans, payments, appointments, gpsStops, users, sessions, vehicles } from "../db/schema";
 
 export const customersRelations = relations(customers, ({one, many}) => ({
 	customer: one(customers, {
@@ -20,6 +20,7 @@ export const customersRelations = relations(customers, ({one, many}) => ({
 		relationName: "customer_billing_property"
 	}),
 	payments: many(payments),
+	appointments: many(appointments),
 }));
 
 export const contactsRelations = relations(contacts, ({one}) => ({
@@ -64,6 +65,14 @@ export const paymentsRelations = relations(payments, ({one}) => ({
 
 export const appointmentsRelations = relations(appointments, ({one, many}) => ({
 	payments: many(payments),
+	customer: one(customers, {
+		fields: [appointments.customerId],
+		references: [customers.id]
+	}),
+	vehicle: one(vehicles, {
+		fields: [appointments.vehicleId],
+		references: [vehicles.id]
+	}),
 	property: one(properties, {
 		fields: [appointments.propertyId],
 		references: [properties.id]
@@ -94,4 +103,9 @@ export const sessionsRelations = relations(sessions, ({one}) => ({
 		fields: [sessions.userId],
 		references: [users.id]
 	}),
+}));
+
+
+export const vehiclesRelations = relations(vehicles, ({many}) => ({
+	appointments: many(appointments),
 }));

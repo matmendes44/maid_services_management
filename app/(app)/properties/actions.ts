@@ -4,9 +4,9 @@ import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { customers, properties } from "@/db/schema";
+import { appointments, customers, properties } from "@/db/schema";
 import { requireUser } from "@/lib/auth/session";
-import { nextId, pgError } from "@/lib/db-helpers";
+import { asUser, nextId, pgError } from "@/lib/db-helpers";
 import { addressToRow, readAddress, validateAddress, type AddressField } from "./options";
 
 export type PropertyField = AddressField | "customerId" | "accessNotes" | "serviceNotes";
@@ -93,7 +93,7 @@ export async function updateProperty(
   _prev: PropertyFormState,
   formData: FormData,
 ): Promise<PropertyFormState> {
-  await requireUser();
+  const user = await requireUser();
   const { customerId, row, isActive, makeBilling, errors, hasErrors } = parse(formData);
   if (hasErrors) return { errors };
 
@@ -107,6 +107,8 @@ export async function updateProperty(
 
   // All in one transaction, in this order:
   const statements: [BatchItem<"pg">, ...BatchItem<"pg">[]] = [
+    // 0. Who's acting, for the appointment history written in step 5.
+    asUser(user.id),
     // 1. Stop this property being anyone's billing address, except the
     //    (new) customer's when it's staying their billing address. The
     //    foreign key wouldn't allow the move otherwise.
@@ -142,6 +144,23 @@ export async function updateProperty(
              limit 1)`,
         })
         .where(and(eq(customers.id, previousCustomerId), isNull(customers.billingPropertyId))),
+    );
+  }
+
+  // 5. After a transfer, visits still to come go to the new owner; completed
+  //    and canceled ones stay with the customer they were for.
+  if (moved) {
+    statements.push(
+      db
+        .update(appointments)
+        .set({ customerId })
+        .where(
+          and(
+            eq(appointments.propertyId, id),
+            eq(appointments.customerId, previousCustomerId),
+            eq(appointments.status, "pending"),
+          ),
+        ),
     );
   }
 

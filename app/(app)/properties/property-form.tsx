@@ -91,8 +91,9 @@ export function PropertyForm({
                 Transferring from {original.label} to {transferTo.label}
               </p>
               <p className="text-muted-foreground">
-                The property&apos;s service plan and visit history move with it; payments stay with{" "}
-                {original.label}. If {transferTo.label} has no billing address yet, this becomes it.
+                The service plan and pending appointments move with it. Completed and canceled
+                appointments and payments stay with {original.label}. If {transferTo.label} has no
+                billing address yet, this becomes it.
                 {initialValues.isBilling &&
                   ` ${original.label}'s billing address switches to their next property, if they have one.`}
               </p>

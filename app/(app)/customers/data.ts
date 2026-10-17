@@ -1,7 +1,7 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth/session";
-import { appointments, customers, payments, properties } from "@/db/schema";
+import { appointments, customers, payments, properties, vehicles } from "@/db/schema";
 import { formatAddress } from "../properties/options";
 import { displayName } from "./options";
 
@@ -80,18 +80,22 @@ export async function getCustomerDetail(id: number) {
         payments: { orderBy: desc(payments.paidAt), limit: 10 },
       },
     }),
+    // by the customer each appointment was booked for, so history stays put
+    // when a property changes hands
     db
       .select({
         id: appointments.id,
         scheduledStart: appointments.scheduledStart,
+        scheduledEnd: appointments.scheduledEnd,
         status: appointments.status,
         priceCents: appointments.priceCents,
-        crew: appointments.crew,
         street: properties.street,
+        vehicleName: vehicles.name,
       })
       .from(appointments)
       .innerJoin(properties, eq(properties.id, appointments.propertyId))
-      .where(eq(properties.customerId, id))
+      .leftJoin(vehicles, eq(vehicles.id, appointments.vehicleId))
+      .where(eq(appointments.customerId, id))
       .orderBy(desc(appointments.scheduledStart))
       .limit(10),
     db

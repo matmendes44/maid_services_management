@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  CalendarPlus,
   List,
   Mail,
   Pencil,
@@ -22,6 +23,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "cn";
+import {
+  formatDay as formatApptDay,
+  formatTimeRange,
+  statusLabels as appointmentStatusLabels,
+  statusVariant as appointmentStatusVariant,
+} from "../../appointments/options";
 import { zoneLabels } from "../../properties/options";
 import { AddContact } from "../add-contact";
 import { getAdjacentCustomers, getCustomerDetail, parseCustomerId } from "../data";
@@ -169,6 +176,10 @@ async function CustomerRecord({
           Back
         </Link>
         <span className="mx-1 h-6 w-px bg-border" aria-hidden="true" />
+        <Link href={`/appointments/new?customer=${customer.id}`} className={buttonVariants({ variant: "outline" })}>
+          <CalendarPlus aria-hidden="true" />
+          New appointment
+        </Link>
         <Link
           href={`/properties/new?customer=${customer.id}`}
           className={buttonVariants({ variant: "outline" })}
@@ -463,40 +474,63 @@ async function CustomerRecord({
             ),
           },
           {
-            value: "visits",
-            label: "Visits",
-            content:
-              customer.recentVisits.length === 0 ? (
-                <Empty>No visits yet.</Empty>
-              ) : (
-                <>
-                  <p className="mb-3 text-sm text-muted-foreground">The 10 most recent visits.</p>
+            value: "appointments",
+            label: "Appointments",
+            content: (
+              <>
+                <Toolbar>
+                  <Link
+                    href={`/appointments/new?customer=${customer.id}`}
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                  >
+                    <Plus aria-hidden="true" />
+                    New appointment
+                  </Link>
+                  {customer.recentVisits.length > 0 && (
+                    <span className="text-sm text-muted-foreground">The 10 most recent.</span>
+                  )}
+                </Toolbar>
+                {customer.recentVisits.length === 0 ? (
+                  <Empty>No appointments yet.</Empty>
+                ) : (
                   <TableFrame>
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Date</TableHead>
+                          <TableHead>Time</TableHead>
                           <TableHead>Property</TableHead>
-                          <TableHead>Crew</TableHead>
+                          <TableHead>Vehicle</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="text-right">Price</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {customer.recentVisits.map((v) => (
-                          <TableRow key={v.id}>
-                            <TableCell>{formatDate(v.scheduledStart)}</TableCell>
+                          <TableRow key={v.id} className="relative">
+                            <TableCell>
+                              <Link
+                                href={`/appointments/${v.id}`}
+                                className="font-medium after:absolute after:inset-0 hover:text-link focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                              >
+                                {formatApptDay(v.scheduledStart)}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="tabular-nums">{formatTimeRange(v.scheduledStart, v.scheduledEnd)}</TableCell>
                             <TableCell>{v.street}</TableCell>
-                            <TableCell>{v.crew ?? "—"}</TableCell>
-                            <TableCell className="capitalize">{v.status.replace("_", " ")}</TableCell>
+                            <TableCell>{v.vehicleName ?? "—"}</TableCell>
+                            <TableCell>
+                              <Badge variant={appointmentStatusVariant[v.status]}>{appointmentStatusLabels[v.status]}</Badge>
+                            </TableCell>
                             <TableCell className="text-right tabular-nums">{formatCents(v.priceCents)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </TableFrame>
-                </>
-              ),
+                )}
+              </>
+            ),
           },
           {
             value: "payments",
